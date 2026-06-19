@@ -8,7 +8,7 @@ admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/api/reviews', methods=['POST'])
 def post_review():
-    """感想を投稿する（未承認状態で保存）"""
+    """感想を投稿する（即公開）"""
     data = request.get_json() or {}
     nickname = (data.get('nickname') or '').strip()
     content  = (data.get('content') or '').strip()
@@ -19,21 +19,20 @@ def post_review():
         return jsonify({'error': '感想は500文字以内で入力してください'}), 400
 
     query(
-        '''INSERT INTO reviews (nickname, user_type, content, is_approved)
-           VALUES (%s, %s, %s, 0)''',
+        '''INSERT INTO reviews (nickname, user_type, content)
+           VALUES (%s, %s, %s)''',
         (nickname, data.get('user_type', 'unknown'), content),
         commit=True
     )
-    return jsonify({'status': 'ok', 'message': '感想を受け付けました。確認後に公開されます。'})
+    return jsonify({'status': 'ok', 'message': '感想を投稿しました。ありがとうございます！'})
 
 
 @admin_bp.route('/api/reviews', methods=['GET'])
-def get_approved_reviews():
-    """承認済み感想を取得（LP表示用）"""
+def get_reviews():
+    """感想を取得（LP表示用・新しい順）"""
     reviews = query(
         '''SELECT nickname, user_type, content, created_at
            FROM reviews
-           WHERE is_approved = 1
            ORDER BY created_at DESC
            LIMIT 10''',
         fetchall=True
@@ -78,7 +77,7 @@ def get_stats():
 def admin_get_reviews():
     """全感想を取得（管理者用）"""
     reviews = query(
-        '''SELECT id, nickname, user_type, content, is_approved, created_at
+        '''SELECT id, nickname, user_type, content, created_at
            FROM reviews
            ORDER BY created_at DESC''',
         fetchall=True
@@ -86,15 +85,8 @@ def admin_get_reviews():
     return jsonify({'reviews': reviews or []})
 
 
-@admin_bp.route('/api/admin/reviews/<int:review_id>/approve', methods=['POST'])
-def approve_review(review_id):
-    """感想を承認する"""
-    query('UPDATE reviews SET is_approved = 1 WHERE id = %s', (review_id,), commit=True)
-    return jsonify({'status': 'ok'})
-
-
 @admin_bp.route('/api/admin/reviews/<int:review_id>', methods=['DELETE'])
 def delete_review(review_id):
-    """感想を削除する"""
+    """感想を削除する（管理者用）"""
     query('DELETE FROM reviews WHERE id = %s', (review_id,), commit=True)
     return jsonify({'status': 'ok'})
