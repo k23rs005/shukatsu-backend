@@ -106,3 +106,85 @@ def get_company(company_id):
     if not company:
         return jsonify({'error': '企業が見つかりません'}), 404
     return jsonify(company)
+
+@company_bp.route('/api/companies/search_by_conditions', methods=['POST'])
+def search_by_conditions():
+    """
+    JSON条件で企業検索（Dify連携用）
+    リクエストbody例:
+      {
+        "industry": "IT",
+        "max_overtime": 25,
+        "culture": "おだやか"
+      }
+    """
+    data = request.get_json() or {}
+
+    conditions = []
+    params = []
+
+    if data.get('industry'):
+        conditions.append('industry = %s')
+        params.append(data['industry'])
+
+    if data.get('min_holidays') is not None:
+        try:
+            conditions.append('annual_holidays >= %s')
+            params.append(int(data['min_holidays']))
+        except (ValueError, TypeError):
+            pass
+
+    if data.get('max_overtime') is not None:
+        try:
+            conditions.append('overtime_hours <= %s')
+            params.append(int(data['max_overtime']))
+        except (ValueError, TypeError):
+            pass
+
+    if data.get('remote_work') in ('full', 'partial', 'none'):
+        conditions.append('remote_work = %s')
+        params.append(data['remote_work'])
+
+    if data.get('transfer') in ('あり', 'なし'):
+        conditions.append('transfer = %s')
+        params.append(data['transfer'])
+
+    if data.get('arts_or_sciences') in ('不問', '理系', '文系'):
+        conditions.append('arts_or_sciences = %s')
+        params.append(data['arts_or_sciences'])
+
+    if data.get('culture'):
+        conditions.append('culture_tags LIKE %s')
+        params.append(f"%{data['culture']}%")
+
+    if data.get('job_type'):
+        conditions.append('job_types LIKE %s')
+        params.append(f"%{data['job_type']}%")
+
+    if data.get('min_salary') is not None:
+        try:
+            conditions.append('starting_salary >= %s')
+            params.append(int(data['min_salary']))
+        except (ValueError, TypeError):
+            pass
+
+    # limit（デフォルト3件・最大5件）
+    try:
+        limit = int(data.get('limit', 3))
+        limit = max(1, min(limit, 5))
+    except (ValueError, TypeError):
+        limit = 3
+
+    sql = 'SELECT id, company_name, industry, location, description, ' \
+          'starting_salary, annual_holidays, overtime_hours, remote_work, ' \
+          'culture_tags, job_types FROM companies'
+    if conditions:
+        sql += ' WHERE ' + ' AND '.join(conditions)
+    sql += f' ORDER BY id ASC LIMIT {limit}'
+
+    results = query(sql, tuple(params), fetchall=True) or []
+
+    return jsonify({
+        'count': len(results),
+        'companies': results
+    })
