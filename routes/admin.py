@@ -34,7 +34,7 @@ def get_reviews():
         '''SELECT nickname, user_type, content, created_at
            FROM reviews
            ORDER BY created_at DESC
-           LIMIT 10''',
+           LIMIT 50''',
         fetchall=True
     )
     return jsonify({'reviews': reviews or []})
