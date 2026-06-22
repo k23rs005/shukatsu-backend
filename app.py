@@ -13,8 +13,18 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 # JS版フロントからのアクセスを許可（構成1）
-frontend_origin = os.getenv('FRONTEND_ORIGIN', 'http://127.0.0.1:5500')
-CORS(app, resources={r'/api/*': {'origins': [frontend_origin, 'http://localhost:5500']}})
+# 複数のオリジンを許可
+allowed_origins = [
+    'http://127.0.0.1:5500',
+    'http://localhost:5500',
+    'https://shukatsu-ai-frontend.onrender.com',
+]
+# 環境変数で追加のオリジンを指定可能
+extra_origin = os.getenv('FRONTEND_ORIGIN')
+if extra_origin and extra_origin not in allowed_origins:
+    allowed_origins.append(extra_origin)
+
+CORS(app, resources={r'/api/*': {'origins': allowed_origins}})
 
 # DBクリーンアップ
 app.teardown_appcontext(close_db)
