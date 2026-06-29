@@ -60,8 +60,14 @@ def search_companies():
     if args.get('arts_or_sciences'):
         if args['arts_or_sciences'] not in ('不問', '理系', '文系'):
             return jsonify({'error': 'arts_or_sciences は 不問/理系/文系 のいずれか'}), 400
-        conditions.append('arts_or_sciences = %s')
-        params.append(args['arts_or_sciences'])
+        # 「不問」は完全一致、それ以外は「不問」も含めて検索
+        if args['arts_or_sciences'] == '不問':
+            conditions.append('arts_or_sciences = %s')
+            params.append('不問')
+        else:
+            conditions.append('arts_or_sciences IN (%s, %s)')
+            params.append(args['arts_or_sciences'])
+            params.append('不問')
 
     if args.get('culture'):
         conditions.append('culture_tags LIKE %s')
@@ -107,6 +113,7 @@ def get_company(company_id):
         return jsonify({'error': '企業が見つかりません'}), 404
     return jsonify(company)
 
+
 @company_bp.route('/api/companies/search_by_conditions', methods=['POST'])
 def search_by_conditions():
     """
@@ -150,8 +157,14 @@ def search_by_conditions():
         params.append(data['transfer'])
 
     if data.get('arts_or_sciences') in ('不問', '理系', '文系'):
-        conditions.append('arts_or_sciences = %s')
-        params.append(data['arts_or_sciences'])
+        # 「不問」は完全一致、それ以外は「不問」も含めて検索
+        if data['arts_or_sciences'] == '不問':
+            conditions.append('arts_or_sciences = %s')
+            params.append('不問')
+        else:
+            conditions.append('arts_or_sciences IN (%s, %s)')
+            params.append(data['arts_or_sciences'])
+            params.append('不問')
 
     if data.get('culture'):
         conditions.append('culture_tags LIKE %s')
