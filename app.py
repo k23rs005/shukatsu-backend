@@ -6,7 +6,7 @@ from database import close_db
 from routes.user import user_bp
 from routes.admin import admin_bp
 from routes.company import company_bp
-
+from routes.auth import auth_bp
 load_dotenv()
 
 app = Flask(__name__)
@@ -24,7 +24,7 @@ extra_origin = os.getenv('FRONTEND_ORIGIN')
 if extra_origin and extra_origin not in allowed_origins:
     allowed_origins.append(extra_origin)
 
-CORS(app, resources={r'/api/*': {'origins': allowed_origins}})
+CORS(app, resources={r'/api/*': {'origins': allowed_origins}}, supports_credentials=True)
 
 # DBクリーンアップ
 app.teardown_appcontext(close_db)
@@ -33,7 +33,7 @@ app.teardown_appcontext(close_db)
 app.register_blueprint(user_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(company_bp)
-
+app.register_blueprint(auth_bp)
 
 @app.route('/')
 def health():
