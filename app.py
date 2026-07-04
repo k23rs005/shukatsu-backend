@@ -9,6 +9,10 @@ from routes.company import company_bp
 from routes.auth import auth_bp
 load_dotenv()
 
+
+# セッションクッキーをクロスサイトで送れるようにする
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 
