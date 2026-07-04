@@ -10,11 +10,13 @@ from routes.auth import auth_bp
 load_dotenv()
 
 
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
+
+
 # セッションクッキーをクロスサイトで送れるようにする
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.config['SESSION_COOKIE_SECURE'] = True
-app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 # JS版フロントからのアクセスを許可（構成1）
 # 複数のオリジンを許可
