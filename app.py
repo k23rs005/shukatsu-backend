@@ -7,6 +7,7 @@ from routes.user import user_bp
 from routes.admin import admin_bp
 from routes.company import company_bp
 from routes.auth import auth_bp
+from routes.staff import staff_bp
 load_dotenv()
 
 
@@ -40,7 +41,7 @@ app.register_blueprint(user_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(company_bp)
 app.register_blueprint(auth_bp)
-
+app.register_blueprint(staff_bp)
 @app.route('/')
 def health():
     """疎通確認用"""
