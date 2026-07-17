@@ -55,3 +55,31 @@ def record_turn():
         commit=True
     )
     return jsonify({'status': 'ok'})
+@user_bp.route('/api/turn/tags', methods=['POST'])
+def update_tags():
+    """トピックタグを更新する"""
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    new_tags = data.get('tags', [])
+
+    if not session_id or not new_tags:
+        return jsonify({'status': 'ok'})
+
+    user = get_or_create_user(session_id)
+
+    # 既存タグと新しいタグをマージ（重複なし）
+    existing = query(
+        'SELECT topic_tags FROM users WHERE id = %s',
+        (user['id'],), fetchone=True
+    )
+    existing_tags = set(
+        t.strip() for t in (existing.get('topic_tags') or '').split(',') if t.strip()
+    )
+    merged = existing_tags | set(new_tags)
+
+    query(
+        'UPDATE users SET topic_tags = %s WHERE id = %s',
+        (','.join(merged), user['id']),
+        commit=True
+    )
+    return jsonify({'status': 'ok'})
