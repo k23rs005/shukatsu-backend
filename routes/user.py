@@ -16,26 +16,32 @@ def get_or_create_user(session_id):
 @user_bp.route('/api/onboarding', methods=['POST'])
 def save_onboarding():
     """オンボーディング結果（型・進捗・期待）を保存"""
+    from flask import session as flask_session
     data = request.get_json() or {}
     session_id = data.get('session_id')
     if not session_id:
         return jsonify({'error': 'session_idが必要です'}), 400
 
     user = get_or_create_user(session_id)
+
+    # ログイン中のaccount_idを取得して紐付け
+    account_id = flask_session.get('account_id')
+
     query(
         '''UPDATE users
-           SET user_type = %s, progress = %s, expectation = %s
+           SET user_type = %s, progress = %s, expectation = %s,
+               account_id = COALESCE(account_id, %s)
            WHERE id = %s''',
         (
             data.get('user_type', 'unknown'),
             data.get('progress', 'unknown'),
             data.get('expectation', 'unknown'),
+            account_id,
             user['id']
         ),
         commit=True
     )
     return jsonify({'status': 'ok', 'user_type': data.get('user_type')})
-
 
 @user_bp.route('/api/turn', methods=['POST'])
 def record_turn():
