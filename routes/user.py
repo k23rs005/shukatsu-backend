@@ -89,3 +89,43 @@ def update_tags():
         commit=True
     )
     return jsonify({'status': 'ok'})
+
+@user_bp.route('/api/messages', methods=['POST'])
+def save_message():
+    """1件のメッセージ（ユーザー発言 or AI返答）を保存する"""
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    role       = data.get('role')
+    content    = (data.get('content') or '').strip()
+
+    if not session_id or role not in ('user', 'ai') or not content:
+        return jsonify({'error': 'session_id, role, contentが必要です'}), 400
+
+    user = get_or_create_user(session_id)
+    query(
+        'INSERT INTO messages (user_id, role, content) VALUES (%s, %s, %s)',
+        (user['id'], role, content),
+        commit=True
+    )
+    return jsonify({'status': 'ok'})
+
+
+@user_bp.route('/api/messages', methods=['GET'])
+def get_messages():
+    """指定セッションの会話履歴を古い順に返す"""
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'session_idが必要です'}), 400
+
+    user = query('SELECT id FROM users WHERE session_id = %s', (session_id,), fetchone=True)
+    if not user:
+        return jsonify({'messages': []})
+
+    rows = query(
+        '''SELECT role, content, created_at
+           FROM messages WHERE user_id = %s
+           ORDER BY created_at ASC, id ASC''',
+        (user['id'],),
+        fetchall=True
+    )
+    return jsonify({'messages': rows or []})
