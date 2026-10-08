@@ -8,6 +8,19 @@ def get_or_create_user(session_id):
     """session_idからユーザーを取得、なければ作成"""
     account_id = flask_session.get('account_id')
     user = query('SELECT * FROM users WHERE session_id = %s', (session_id,), fetchone=True)
+    # session_idが変わった場合も、ログイン中アカウントの既存レコードを再利用する
+    if not user and account_id:
+        user = query(
+            '''SELECT * FROM users WHERE account_id = %s
+               ORDER BY updated_at DESC LIMIT 1''',
+            (account_id,), fetchone=True
+        )
+        if user:
+            query(
+                'UPDATE users SET session_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
+                (session_id, user['id']), commit=True
+            )
+            user = query('SELECT * FROM users WHERE id = %s', (user['id'],), fetchone=True)
     if not user:
         returning_id = ' RETURNING id' if USE_POSTGRES else ''
         if account_id:
@@ -25,7 +38,8 @@ def get_or_create_user(session_id):
         user = query('SELECT * FROM users WHERE id = %s', (uid,), fetchone=True)
     elif account_id and not user.get('account_id'):
         query(
-            'UPDATE users SET account_id = %s WHERE id = %s AND account_id IS NULL',
+            '''UPDATE users SET account_id = %s, updated_at = CURRENT_TIMESTAMP
+               WHERE id = %s AND account_id IS NULL''',
             (account_id, user['id']), commit=True
         )
         user = query('SELECT * FROM users WHERE id = %s', (user['id'],), fetchone=True)
@@ -80,7 +94,8 @@ def record_turn():
             '''UPDATE users
                SET turn_count = turn_count + 1,
                    dify_conversation_id = %s,
-                   user_type = %s
+                   user_type = %s,
+                   updated_at = CURRENT_TIMESTAMP
                WHERE id = %s''',
             (data.get('dify_conversation_id'), user_type, user['id']),
             commit=True
@@ -89,7 +104,8 @@ def record_turn():
         query(
             '''UPDATE users
                SET turn_count = turn_count + 1,
-                   dify_conversation_id = %s
+                   dify_conversation_id = %s,
+                   updated_at = CURRENT_TIMESTAMP
                WHERE id = %s''',
             (data.get('dify_conversation_id'), user['id']),
             commit=True
@@ -118,7 +134,7 @@ def update_tags():
     merged = existing_tags | set(new_tags)
 
     query(
-        'UPDATE users SET topic_tags = %s WHERE id = %s',
+        'UPDATE users SET topic_tags = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
         (','.join(merged), user['id']),
         commit=True
     )
@@ -140,6 +156,10 @@ def save_message():
         'INSERT INTO messages (user_id, role, content) VALUES (%s, %s, %s)',
         (user['id'], role, content),
         commit=True
+    )
+    query(
+        'UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = %s',
+        (user['id'],), commit=True
     )
     return jsonify({'status': 'ok'})
 
