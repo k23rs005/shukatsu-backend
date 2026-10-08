@@ -1,22 +1,40 @@
-from flask import Blueprint, request, jsonify
-from database import query
+from flask import Blueprint, request, jsonify, session as flask_session
+from database import query, USE_POSTGRES
 
 user_bp = Blueprint('user', __name__)
 
 
 def get_or_create_user(session_id):
     """session_idからユーザーを取得、なければ作成"""
+    account_id = flask_session.get('account_id')
     user = query('SELECT * FROM users WHERE session_id = %s', (session_id,), fetchone=True)
     if not user:
-        uid = query('INSERT INTO users (session_id) VALUES (%s)', (session_id,), commit=True)
+        returning_id = ' RETURNING id' if USE_POSTGRES else ''
+        if account_id:
+            uid = query(
+                f'INSERT INTO users (session_id, account_id) VALUES (%s, %s){returning_id}',
+                (session_id, account_id), commit=True
+            )
+        else:
+            uid = query(
+                f'INSERT INTO users (session_id) VALUES (%s){returning_id}',
+                (session_id,), commit=True
+            )
+        if isinstance(uid, dict):
+            uid = uid['id']
         user = query('SELECT * FROM users WHERE id = %s', (uid,), fetchone=True)
+    elif account_id and not user.get('account_id'):
+        query(
+            'UPDATE users SET account_id = %s WHERE id = %s AND account_id IS NULL',
+            (account_id, user['id']), commit=True
+        )
+        user = query('SELECT * FROM users WHERE id = %s', (user['id'],), fetchone=True)
     return user
 
 
 @user_bp.route('/api/onboarding', methods=['POST'])
 def save_onboarding():
     """オンボーディング結果（型・進捗・期待）を保存"""
-    from flask import session as flask_session
     data = request.get_json() or {}
     session_id = data.get('session_id')
     if not session_id:
@@ -52,15 +70,31 @@ def record_turn():
         return jsonify({'error': 'session_idが必要です'}), 400
 
     user = get_or_create_user(session_id)
-    query(
-        '''UPDATE users
-           SET turn_count = turn_count + 1,
-               dify_conversation_id = %s
-           WHERE id = %s''',
-        (data.get('dify_conversation_id'), user['id']),
-        commit=True
-    )
-    return jsonify({'status': 'ok'})
+    user_type = data.get('user_type')
+    allowed_types = {'avoid', 'comm', 'lost'}
+    if user_type not in allowed_types:
+        user_type = None
+
+    if user_type:
+        query(
+            '''UPDATE users
+               SET turn_count = turn_count + 1,
+                   dify_conversation_id = %s,
+                   user_type = %s
+               WHERE id = %s''',
+            (data.get('dify_conversation_id'), user_type, user['id']),
+            commit=True
+        )
+    else:
+        query(
+            '''UPDATE users
+               SET turn_count = turn_count + 1,
+                   dify_conversation_id = %s
+               WHERE id = %s''',
+            (data.get('dify_conversation_id'), user['id']),
+            commit=True
+        )
+    return jsonify({'status': 'ok', 'user_type': user_type})
 @user_bp.route('/api/turn/tags', methods=['POST'])
 def update_tags():
     """トピックタグを更新する"""
