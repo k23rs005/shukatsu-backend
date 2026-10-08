@@ -1,3 +1,4 @@
+import hashlib
 from flask import Blueprint, request, jsonify, session as flask_session
 from database import query, USE_POSTGRES
 
@@ -7,7 +8,13 @@ user_bp = Blueprint('user', __name__)
 def get_or_create_user(session_id):
     """session_idからユーザーを取得、なければ作成"""
     account_id = flask_session.get('account_id')
-    user = query('SELECT * FROM users WHERE session_id = %s', (session_id,), fetchone=True)
+    # ブラウザーから届くIDをアカウントごとに名前空間化し、別アカウントとの衝突を防ぐ
+    storage_session_id = session_id
+    if account_id:
+        session_hash = hashlib.sha256(str(session_id).encode('utf-8')).hexdigest()[:40]
+        storage_session_id = f'acct-{account_id}-{session_hash}'
+
+    user = query('SELECT * FROM users WHERE session_id = %s', (storage_session_id,), fetchone=True)
     # session_idが変わった場合も、ログイン中アカウントの既存レコードを再利用する
     if not user and account_id:
         user = query(
@@ -18,7 +25,7 @@ def get_or_create_user(session_id):
         if user:
             query(
                 'UPDATE users SET session_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
-                (session_id, user['id']), commit=True
+                (storage_session_id, user['id']), commit=True
             )
             user = query('SELECT * FROM users WHERE id = %s', (user['id'],), fetchone=True)
     if not user:
@@ -26,12 +33,12 @@ def get_or_create_user(session_id):
         if account_id:
             uid = query(
                 f'INSERT INTO users (session_id, account_id) VALUES (%s, %s){returning_id}',
-                (session_id, account_id), commit=True
+                (storage_session_id, account_id), commit=True
             )
         else:
             uid = query(
                 f'INSERT INTO users (session_id) VALUES (%s){returning_id}',
-                (session_id,), commit=True
+                (storage_session_id,), commit=True
             )
         if isinstance(uid, dict):
             uid = uid['id']
@@ -171,9 +178,7 @@ def get_messages():
     if not session_id:
         return jsonify({'error': 'session_idが必要です'}), 400
 
-    user = query('SELECT id FROM users WHERE session_id = %s', (session_id,), fetchone=True)
-    if not user:
-        return jsonify({'messages': []})
+    user = get_or_create_user(session_id)
 
     rows = query(
         '''SELECT role, content, created_at
@@ -182,4 +187,7 @@ def get_messages():
         (user['id'],),
         fetchall=True
     )
-    return jsonify({'messages': rows or []})
+    return jsonify({
+        'messages': rows or [],
+        'dify_conversation_id': user.get('dify_conversation_id')
+    })
