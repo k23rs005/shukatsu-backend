@@ -24,6 +24,7 @@ def get_students():
             a.id,
             a.login_id,
             a.nickname,
+            a.login_count,
             u.user_type,
             u.turn_count,
             u.topic_tags,
@@ -43,7 +44,7 @@ def get_students():
 def get_student_detail(account_id):
     """個別学生のメタ情報を取得（キャリセン用）"""
     account = query(
-        'SELECT id, login_id, nickname FROM accounts WHERE id = %s AND role = %s',
+        'SELECT id, login_id, nickname, login_count FROM accounts WHERE id = %s AND role = %s',
         (account_id, 'student'), fetchone=True
     )
     if not account:

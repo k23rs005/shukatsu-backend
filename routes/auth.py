@@ -1,8 +1,47 @@
 from flask import Blueprint, request, jsonify, session
-from database import query
+from database import query, USE_POSTGRES
 import bcrypt
 
 auth_bp = Blueprint('auth', __name__)
+_login_count_column_ready = False
+
+
+def ensure_login_count_column():
+    """既存DBにもログイン回数カラムを追加する"""
+    global _login_count_column_ready
+    if _login_count_column_ready:
+        return
+
+    if USE_POSTGRES:
+        query(
+            'ALTER TABLE accounts ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0',
+            commit=True
+        )
+    else:
+        column = query(
+            '''SELECT COUNT(*) AS column_count
+               FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'accounts'
+                 AND COLUMN_NAME = 'login_count' ''',
+            fetchone=True
+        )
+        if not column or not column.get('column_count'):
+            query(
+                'ALTER TABLE accounts ADD COLUMN login_count INT NOT NULL DEFAULT 0',
+                commit=True
+            )
+    _login_count_column_ready = True
+
+
+def increment_login_count(account_id):
+    query(
+        '''UPDATE accounts
+           SET login_count = COALESCE(login_count, 0) + 1,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = %s''',
+        (account_id,), commit=True
+    )
 
 
 # ===== ユーザー登録 =====
@@ -10,6 +49,7 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/api/auth/signup', methods=['POST'])
 def signup():
     """新規アカウント作成（学生のみ）"""
+    ensure_login_count_column()
     data = request.get_json() or {}
     login_id = (data.get('login_id') or '').strip()
     nickname  = (data.get('nickname') or '').strip()
@@ -45,6 +85,8 @@ def signup():
         'SELECT id, login_id, nickname, role FROM accounts WHERE login_id = %s',
         (login_id,), fetchone=True
     )
+    # 登録直後の自動ログインも1回として記録
+    increment_login_count(new_account['id'])
     session['account_id'] = new_account['id']
     session['role'] = new_account['role']
 
@@ -65,6 +107,7 @@ def signup():
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
     """ログイン（学生・キャリセン共通）"""
+    ensure_login_count_column()
     data = request.get_json() or {}
     login_id = (data.get('login_id') or '').strip()
     password  = data.get('password') or ''
@@ -83,6 +126,8 @@ def login():
     # パスワード照合
     if not bcrypt.checkpw(password.encode('utf-8'), account['password_hash'].encode('utf-8')):
         return jsonify({'error': 'IDまたはパスワードが間違っています'}), 401
+
+    increment_login_count(account['id'])
 
     # セッションに保存
     session['account_id'] = account['id']
