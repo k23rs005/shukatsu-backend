@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from database import query, USE_POSTGRES
 import bcrypt
+import re
 
 auth_bp = Blueprint('auth', __name__)
 _login_count_column_ready = False
@@ -57,6 +58,10 @@ def signup():
 
     if not login_id or not nickname or not password:
         return jsonify({'error': 'ID・ニックネーム・パスワードを全て入力してください'}), 400
+    if not re.fullmatch(r'[A-Za-z0-9]+', login_id):
+        return jsonify({'error': 'IDは半角英数字のみで入力してください'}), 400
+    if not re.fullmatch(r'[A-Za-z0-9]+', password):
+        return jsonify({'error': 'パスワードは半角英数字のみで入力してください'}), 400
     if len(password) < 6:
         return jsonify({'error': 'パスワードは6文字以上にしてください'}), 400
     if len(login_id) > 50:
