@@ -43,6 +43,9 @@ def get_students():
 @require_staff
 def get_student_detail(account_id):
     """個別学生のメタ情報を取得（キャリセン用）"""
+    from routes.profile import ensure_profile_table
+    ensure_profile_table()
+
     account = query(
         'SELECT id, login_id, nickname, login_count FROM accounts WHERE id = %s AND role = %s',
         (account_id, 'student'), fetchone=True
@@ -51,9 +54,13 @@ def get_student_detail(account_id):
         return jsonify({'error': '学生が見つかりません'}), 404
 
     user = query(
-        '''SELECT user_type, progress, expectation,
-                  turn_count, topic_tags, updated_at, created_at
-           FROM users WHERE account_id = %s''',
+        '''SELECT u.user_type, u.turn_count, u.topic_tags, u.updated_at, u.created_at,
+                  CASE WHEN p.account_id IS NOT NULL THEN p.progress ELSE u.progress END AS progress,
+                  CASE WHEN p.account_id IS NOT NULL THEN p.expectation ELSE u.expectation END AS expectation
+           FROM accounts a
+           LEFT JOIN users u ON u.account_id = a.id
+           LEFT JOIN student_profiles p ON p.account_id = a.id
+           WHERE a.id = %s''',
         (account_id,), fetchone=True
     )
 
