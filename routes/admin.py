@@ -1,43 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify
 from database import query
 
 admin_bp = Blueprint('admin', __name__)
-
-
-# ===== 感想投稿（一般ユーザー） =====
-
-@admin_bp.route('/api/reviews', methods=['POST'])
-def post_review():
-    """感想を投稿する（即公開）"""
-    data = request.get_json() or {}
-    nickname = (data.get('nickname') or '').strip()
-    content  = (data.get('content') or '').strip()
-
-    if not nickname or not content:
-        return jsonify({'error': 'ニックネームと感想を入力してください'}), 400
-    if len(content) > 500:
-        return jsonify({'error': '感想は500文字以内で入力してください'}), 400
-
-    query(
-        '''INSERT INTO reviews (nickname, user_type, content)
-           VALUES (%s, %s, %s)''',
-        (nickname, data.get('user_type', 'unknown'), content),
-        commit=True
-    )
-    return jsonify({'status': 'ok', 'message': '感想を投稿しました。ありがとうございます！'})
-
-
-@admin_bp.route('/api/reviews', methods=['GET'])
-def get_reviews():
-    """感想を取得（LP表示用・新しい順）"""
-    reviews = query(
-        '''SELECT nickname, user_type, content, created_at
-           FROM reviews
-           ORDER BY created_at DESC
-           LIMIT 50''',
-        fetchall=True
-    )
-    return jsonify({'reviews': reviews or []})
 
 
 # ===== 管理者API =====
